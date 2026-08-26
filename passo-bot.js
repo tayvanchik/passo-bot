@@ -25,6 +25,8 @@
  
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
+const https = require('https');
+const http = require('http');
  
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
@@ -89,6 +91,67 @@ function parseMapLink(url) {
   return null;
 }
  
+// Havolani ochib, redirect'larni kuzatib boradi (masalan Yandex'ning
+// qisqa/tashkilot havolalari — https://yandex.com/maps/org/... — kabi
+// hollarda, havola ichida to'g'ridan-to'g'ri koordinata bo'lmaydi)
+function fetchUrl(url, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    let target;
+    try {
+      target = new URL(url);
+    } catch (e) {
+      return reject(e);
+    }
+    const lib = target.protocol === 'http:' ? http : https;
+    lib.get(target, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
+        const nextUrl = new URL(res.headers.location, target).toString();
+        res.resume();
+        resolve(fetchUrl(nextUrl, maxRedirects - 1));
+        return;
+      }
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ finalUrl: target.toString(), body }));
+    }).on('error', reject);
+  });
+}
+ 
+// Havoladan koordinata topishga harakat qiladi: avval to'g'ridan-to'g'ri
+// havoladan, topilmasa — havolani ochib, yakuniy manzil va sahifa
+// tarkibidan (masalan tashkilot sahifasidagi geo-teglardan) qidiradi
+async function resolveCoords(url) {
+  let coords = parseMapLink(url);
+  if (coords) return coords;
+ 
+  try {
+    const { finalUrl, body } = await fetchUrl(url);
+    coords = parseMapLink(finalUrl);
+    if (coords) return coords;
+ 
+    let m = body.match(/"latitude"\s*:\s*"?(-?\d+\.\d+)"?\s*,\s*"longitude"\s*:\s*"?(-?\d+\.\d+)"?/);
+    if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+ 
+    const latMeta = body.match(/property="place:location:latitude"\s+content="(-?\d+\.\d+)"/);
+    const lonMeta = body.match(/property="place:location:longitude"\s+content="(-?\d+\.\d+)"/);
+    if (latMeta && lonMeta) return { lat: parseFloat(latMeta[1]), lon: parseFloat(lonMeta[1]) };
+  } catch (e) {
+    console.error('Lokatsiya havolasini ochishda xatolik:', e.message);
+  }
+  return null;
+}
+ 
+// Lokatsiya havolasini haqiqiy Telegram pin (joylashuv) sifatida yuboradi.
+// Koordinata topilmasa — havolani preview'siz matn sifatida yuboradi.
+async function sendRealLocation(url) {
+  const coords = await resolveCoords(url);
+  if (coords) {
+    bot.sendLocation(ADMIN_CHAT_ID, coords.lat, coords.lon).catch(() => {});
+  } else {
+    bot.sendMessage(ADMIN_CHAT_ID, `🗺 Lokatsiya havolasi: ${url}`, { disable_web_page_preview: true }).catch(() => {});
+  }
+}
+ 
 function processOrder(data, customer, replyChatId) {
   const customerName = customer?.first_name || 'Mijoz';
   const customerUsername = customer?.username ? `@${customer.username}` : "username yo'q";
@@ -118,7 +181,6 @@ function processOrder(data, customer, replyChatId) {
   const adminMessage =
     `🆕 <b>Yangi buyurtma — PASSO</b>\n` +
     `👤 Mijoz: ${customerName} (${customerUsername})\n` +
-    (replyChatId ? `🆔 Chat ID: <code>${replyChatId}</code>\n` : '') +
     itemsText +
     addressText +
     `\n💰 <b>Jami: ${total.toLocaleString('ru-RU')} so'm</b>`;
@@ -126,15 +188,25 @@ function processOrder(data, customer, replyChatId) {
   // Admin (siz)ga yuboriladi
   bot.sendMessage(ADMIN_CHAT_ID, adminMessage, { parse_mode: 'HTML' });
  
+  // Har bir mahsulotning rasmi (agar mavjud bo'lsa) adminga alohida yuboriladi
+  const photoItems = data.items.filter((item) => item.image);
+  if (photoItems.length === 1) {
+    const item = photoItems[0];
+    bot.sendPhoto(ADMIN_CHAT_ID, item.image, {
+      caption: `👟 ${item.name} — o'lcham: ${item.size}`
+    }).catch((err) => console.error('Mahsulot rasmini yuborishda xatolik:', err.message));
+  } else if (photoItems.length > 1) {
+    const media = photoItems.map((item) => ({
+      type: 'photo',
+      media: item.image,
+      caption: `👟 ${item.name} — o'lcham: ${item.size}`
+    }));
+    bot.sendMediaGroup(ADMIN_CHAT_ID, media).catch((err) => console.error('Mahsulot rasmlarini yuborishda xatolik:', err.message));
+  }
+ 
   // Lokatsiya bo'lsa — haqiqiy Telegram pin (joylashuv) sifatida alohida yuboriladi
   if (data.address && data.address.location) {
-    const coords = parseMapLink(data.address.location);
-    if (coords) {
-      bot.sendLocation(ADMIN_CHAT_ID, coords.lat, coords.lon).catch(() => {});
-    } else {
-      // koordinatalarni ajratib bo'lmasa, havolani matn sifatida yuboramiz
-      bot.sendMessage(ADMIN_CHAT_ID, `🗺 Lokatsiya havolasi: ${data.address.location}`).catch(() => {});
-    }
+    sendRealLocation(data.address.location);
   }
  
   // Mijozga tasdiq xabari (agar chat ID mavjud bo'lsa)

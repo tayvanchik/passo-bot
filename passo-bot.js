@@ -34,8 +34,12 @@ bot.onText(/\/start/, (msg) => {
     "Assalomu alaykum! 👋\n\n" +
     "Bu <b>PASSO</b> — erkaklar uchun original oyoq kiyimlari do'koni.\n\n" +
     "👟 Krossovkalar, botinkalar, sport va klassik poyabzallar bir ilovada.\n\n" +
-    "Har bir mahsulot sifatli va bardoshli materiallardan tayyorlangan.\n\n" +
-    "Kerakli mahsulotni tanlang, o'lchamingizni belgilang va buyurtma bering — hammasi bir necha daqiqada! 👇";
+    "Sifatli mahsulotlar \n" +
+    "Zamonaviy modellar \n" +
+    "Turli xil o'lchamlar \n" +
+    "Buyurtma asosida olib ketish \n\n" +
+    "Siz tanlang - biz olib kelamiz. \n\n" +
+    "Kerakli modelni tanlang va buyurtma bering — hammasi bir necha daqiqada!";
  
   const options = {
     caption,

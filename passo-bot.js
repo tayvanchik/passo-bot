@@ -33,7 +33,7 @@ bot.onText(/\/start/, (msg) => {
   const caption =
     "Assalomu alaykum! 👋\n\n" +
     "Bu <b>PASSO</b> — erkaklar uchun oyoq kiyimlari do'koni.\n\n" +
-    "Krossovkalar, botinkalar, sport va klassik poyabzallar bir ilovada.\n\n" +
+    "Har qanday mavsum va uslub uchun oyoq kiyimlar bir ilovada.\n\n" +
     "Sifatli mahsulotlar \n" +
     "Zamonaviy modellar \n" +
     "Turli xil o'lchamlar \n" +

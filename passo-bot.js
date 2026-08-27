@@ -41,10 +41,10 @@ bot.onText(/\/start/, (msg) => {
   const caption =
     "Bu <b>PASSO</b> — erkaklar oyoq kiyimlari.\n\n" +
     "Sizga yoqqan modelni tanlaysiz — biz esa buyurtmangiz asosida olib kelamiz.\n\n" +
-    "✅ Sifatli mahsulotlar\n" +
-    "✅ Zamonaviy modellar\n" +
-    "✅ Turli xil razmerlar\n" +
-    "✅ Buyurtma asosida olib kelish\n\n" +
+    "Sifatli mahsulotlar\n" +
+    "Zamonaviy modellar\n" +
+    "Turli xil razmerlar\n" +
+    "Buyurtma asosida olib kelish\n\n" +
     "Siz tanlang — biz olib kelamiz.\n\n" +
     "Kerakli modelni tanlang va buyurtma berish uchun pastdagi tugmani bosing ";
  

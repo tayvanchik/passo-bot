@@ -25,8 +25,6 @@
  
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
-const https = require('https');
-const http = require('http');
  
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
@@ -41,14 +39,14 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 // Mini App tugmasini ko'rsatuvchi /start buyrug'i
 bot.onText(/\/start/, (msg) => {
   const caption =
-    "Assalomu alaykum! 👋\n\n" +
     "Bu <b>PASSO</b> — erkaklar oyoq kiyimlari.\n\n" +
-    "Har qanday mavsum va uslub uchun oyoq kiyimlar bir ilovada.\n\n" +
-    "Sifatli mahsulotlar. \n" +
-    "Zamonaviy modellar. \n" +
-    "Turli xil o'lchamlar. \n" +
-    "Buyurtma asosida olib kelish. \n\n" +
-    "Kerakli modelni tanlang, buyurtma bering — hammasi bir necha daqiqada! ";
+    "Sizga yoqqan modelni tanlaysiz — biz esa buyurtmangiz asosida olib kelamiz.\n\n" +
+    "✅ Sifatli mahsulotlar\n" +
+    "✅ Zamonaviy modellar\n" +
+    "✅ Turli xil razmerlar\n" +
+    "✅ Buyurtma asosida olib kelish\n\n" +
+    "Siz tanlang — biz olib kelamiz.\n\n" +
+    "Kerakli modelni tanlang va buyurtma berish uchun pastdagi tugmani bosing ";
  
   const options = {
     caption,
@@ -70,7 +68,6 @@ bot.onText(/\/start/, (msg) => {
   }
 });
  
-// ---------- Buyurtmani qayta ishlash (umumiy funksiya) ----------
 // Yandex yoki Google Maps havolasidan koordinatalarni (kenglik, uzunlik) ajratib olish
 function parseMapLink(url) {
   try {
@@ -91,68 +88,44 @@ function parseMapLink(url) {
   return null;
 }
  
-// Havolani ochib, redirect'larni kuzatib boradi (masalan Yandex'ning
-// qisqa/tashkilot havolalari — https://yandex.com/maps/org/... — kabi
-// hollarda, havola ichida to'g'ridan-to'g'ri koordinata bo'lmaydi)
-function fetchUrl(url, maxRedirects = 5) {
-  return new Promise((resolve, reject) => {
-    let target;
-    try {
-      target = new URL(url);
-    } catch (e) {
-      return reject(e);
-    }
-    const lib = target.protocol === 'http:' ? http : https;
-    lib.get(target, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
-        const nextUrl = new URL(res.headers.location, target).toString();
-        res.resume();
-        resolve(fetchUrl(nextUrl, maxRedirects - 1));
-        return;
-      }
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => resolve({ finalUrl: target.toString(), body }));
-    }).on('error', reject);
-  });
-}
- 
-// Havoladan koordinata topishga harakat qiladi: avval to'g'ridan-to'g'ri
-// havoladan, topilmasa — havolani ochib, yakuniy manzil va sahifa
-// tarkibidan (masalan tashkilot sahifasidagi geo-teglardan) qidiradi
-async function resolveCoords(url) {
-  let coords = parseMapLink(url);
-  if (coords) return coords;
+// Agar havolada koordinata to'g'ridan-to'g'ri ko'rinmasa (masalan kompyuterdan
+// tashlangan "tashkilot" havolasi), sahifaning o'zini ochib, ichidan
+// koordinatalarni qidiramiz.
+async function resolveCoordinatesFromLink(url) {
+  const direct = parseMapLink(url);
+  if (direct) return direct;
  
   try {
-    const { finalUrl, body } = await fetchUrl(url);
-    coords = parseMapLink(finalUrl);
-    if (coords) return coords;
+    const res = await fetch(url, {
+      redirect: 'follow',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      signal: AbortSignal.timeout(8000)
+    });
  
-    let m = body.match(/"latitude"\s*:\s*"?(-?\d+\.\d+)"?\s*,\s*"longitude"\s*:\s*"?(-?\d+\.\d+)"?/);
-    if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+    // Ba'zan sahifa qayta yo'naltirilgandan keyingi manzilning o'zida koordinata bo'ladi
+    if (res.url) {
+      const fromFinalUrl = parseMapLink(res.url);
+      if (fromFinalUrl) return fromFinalUrl;
+    }
  
-    const latMeta = body.match(/property="place:location:latitude"\s+content="(-?\d+\.\d+)"/);
-    const lonMeta = body.match(/property="place:location:longitude"\s+content="(-?\d+\.\d+)"/);
-    if (latMeta && lonMeta) return { lat: parseFloat(latMeta[1]), lon: parseFloat(lonMeta[1]) };
-  } catch (e) {
-    console.error('Lokatsiya havolasini ochishda xatolik:', e.message);
+    const html = await res.text();
+ 
+    // Sahifa ichidagi "latitude"/"longitude" maydonlari (schema.org ma'lumotlari)
+    const latM = html.match(/"latitude"\s*:\s*"?(-?\d+\.\d+)"?/);
+    const lonM = html.match(/"longitude"\s*:\s*"?(-?\d+\.\d+)"?/);
+    if (latM && lonM) return { lat: parseFloat(latM[1]), lon: parseFloat(lonM[1]) };
+ 
+    // Sahifa ichida ko'milgan ll=UZUNLIK,KENGLIK (statik xarita rasmi manzilida bo'lishi mumkin)
+    const llM = html.match(/ll=(-?\d+\.\d+)%2C(-?\d+\.\d+)/) || html.match(/ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (llM) return { lon: parseFloat(llM[1]), lat: parseFloat(llM[2]) };
+ 
+  } catch (err) {
+    console.error('Lokatsiya havolasini ochishda xatolik:', err.message);
   }
   return null;
 }
  
-// Lokatsiya havolasini haqiqiy Telegram pin (joylashuv) sifatida yuboradi.
-// Koordinata topilmasa — havolani preview'siz matn sifatida yuboradi.
-async function sendRealLocation(url) {
-  const coords = await resolveCoords(url);
-  if (coords) {
-    bot.sendLocation(ADMIN_CHAT_ID, coords.lat, coords.lon).catch(() => {});
-  } else {
-    bot.sendMessage(ADMIN_CHAT_ID, `🗺 Lokatsiya havolasi: ${url}`, { disable_web_page_preview: true }).catch(() => {});
-  }
-}
- 
-function processOrder(data, customer, replyChatId) {
+async function processOrder(data, customer, replyChatId) {
   const customerName = customer?.first_name || 'Mijoz';
   const customerUsername = customer?.username ? `@${customer.username}` : "username yo'q";
  
@@ -181,6 +154,7 @@ function processOrder(data, customer, replyChatId) {
   const adminMessage =
     `🆕 <b>Yangi buyurtma — PASSO</b>\n` +
     `👤 Mijoz: ${customerName} (${customerUsername})\n` +
+    (replyChatId ? `🆔 Chat ID: <code>${replyChatId}</code>\n` : '') +
     itemsText +
     addressText +
     `\n💰 <b>Jami: ${total.toLocaleString('ru-RU')} so'm</b>`;
@@ -188,25 +162,15 @@ function processOrder(data, customer, replyChatId) {
   // Admin (siz)ga yuboriladi
   bot.sendMessage(ADMIN_CHAT_ID, adminMessage, { parse_mode: 'HTML' });
  
-  // Har bir mahsulotning rasmi (agar mavjud bo'lsa) adminga alohida yuboriladi
-  const photoItems = data.items.filter((item) => item.image);
-  if (photoItems.length === 1) {
-    const item = photoItems[0];
-    bot.sendPhoto(ADMIN_CHAT_ID, item.image, {
-      caption: `👟 ${item.name} — o'lcham: ${item.size}`
-    }).catch((err) => console.error('Mahsulot rasmini yuborishda xatolik:', err.message));
-  } else if (photoItems.length > 1) {
-    const media = photoItems.map((item) => ({
-      type: 'photo',
-      media: item.image,
-      caption: `👟 ${item.name} — o'lcham: ${item.size}`
-    }));
-    bot.sendMediaGroup(ADMIN_CHAT_ID, media).catch((err) => console.error('Mahsulot rasmlarini yuborishda xatolik:', err.message));
-  }
- 
   // Lokatsiya bo'lsa — haqiqiy Telegram pin (joylashuv) sifatida alohida yuboriladi
   if (data.address && data.address.location) {
-    sendRealLocation(data.address.location);
+    const coords = await resolveCoordinatesFromLink(data.address.location);
+    if (coords) {
+      bot.sendLocation(ADMIN_CHAT_ID, coords.lat, coords.lon).catch(() => {});
+    } else {
+      // koordinatalarni ajratib bo'lmasa, havolani matn sifatida yuboramiz
+      bot.sendMessage(ADMIN_CHAT_ID, `🗺 Lokatsiya havolasi: ${data.address.location}`).catch(() => {});
+    }
   }
  
   // Mijozga tasdiq xabari (agar chat ID mavjud bo'lsa)
@@ -217,12 +181,12 @@ function processOrder(data, customer, replyChatId) {
 }
  
 // Eski usul: Reply Keyboard orqali ochilgan Mini App'lar uchun (agar bo'lsa)
-bot.on('message', (msg) => {
+bot.on('message', async (msg) => {
   if (!msg.web_app_data) return;
   try {
     const data = JSON.parse(msg.web_app_data.data);
     if (data.type !== 'order') return;
-    processOrder(data, msg.from, msg.chat.id);
+    await processOrder(data, msg.from, msg.chat.id);
   } catch (err) {
     console.error('Buyurtmani qayta ishlashda xatolik:', err);
   }
@@ -251,7 +215,10 @@ app.post('/api/order', (req, res) => {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ ok: false, error: "Mahsulotlar ro'yxati bo'sh" });
     }
-    processOrder({ items, address }, user, user?.id);
+    // Mijozga tezroq javob qaytarish uchun, buyurtmani fonda qayta ishlaymiz
+    processOrder({ items, address }, user, user?.id).catch(err => {
+      console.error('API orqali buyurtmani qayta ishlashda xatolik:', err);
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error('API orqali buyurtmani qayta ishlashda xatolik:', err);

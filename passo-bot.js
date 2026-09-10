@@ -1,5 +1,5 @@
 /**
- * PASSO — Telegram bot backend
+ * TOTSAMIY — Telegram bot backend
  * -----------------------------
  * Bu skript ikkita vazifani bajaradi:
  * 1) Telegram bot sifatida ishlaydi (/start buyrug'i)
@@ -22,32 +22,32 @@
  *   Telegram'da @userinfobot'ga /start yozing — u sizga "Id" raqamingizni
  *   ko'rsatadi (masalan 123456789). Shu raqamni pastga qo'ying.
  */
- 
+
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
- 
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
- 
+
 if (!BOT_TOKEN || !ADMIN_CHAT_ID) {
   console.error('XATOLIK: BOT_TOKEN va ADMIN_CHAT_ID muhit o\'zgaruvchilari kiritilmagan!');
   process.exit(1);
 }
- 
+
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
- 
+
 // Mini App tugmasini ko'rsatuvchi /start buyrug'i
 bot.onText(/\/start/, (msg) => {
   const caption =
-    "Bu <b>PASSO</b> — erkaklar oyoq kiyimlari.\n\n" +
+    "Bu <b>TOTSAMIY</b> — erkaklar oyoq kiyimlari.\n\n" +
     "Sizga yoqqan modelni tanlaysiz — biz esa buyurtmangiz asosida olib kelamiz.\n\n" +
-    "Sifatli mahsulotlar\n" +
-    "Zamonaviy modellar\n" +
-    "Turli xil razmerlar\n" +
-    "Buyurtma asosida olib kelish\n\n" +
+    "✅ Sifatli mahsulotlar\n" +
+    "✅ Zamonaviy modellar\n" +
+    "✅ Turli xil razmerlar\n" +
+    "✅ Buyurtma asosida olib kelish\n\n" +
     "Siz tanlang — biz olib kelamiz.\n\n" +
-    "Kerakli modelni tanlang va buyurtma berish uchun pastdagi tugmani bosing ";
- 
+    "Kerakli modelni tanlang va buyurtma berish uchun pastdagi tugmani bosing 👇";
+
   const options = {
     caption,
     parse_mode: 'HTML',
@@ -58,16 +58,16 @@ bot.onText(/\/start/, (msg) => {
       }]]
     }
   };
- 
+
   const HERO_IMAGE_URL = 'https://raw.githubusercontent.com/tayvanchik/passo-bot/main/logo.png';
- 
+
   if (HERO_IMAGE_URL) {
     bot.sendPhoto(msg.chat.id, HERO_IMAGE_URL, options);
   } else {
     bot.sendMessage(msg.chat.id, caption, options);
   }
 });
- 
+
 // Yandex yoki Google Maps havolasidan koordinatalarni (kenglik, uzunlik) ajratib olish
 function parseMapLink(url) {
   try {
@@ -87,51 +87,51 @@ function parseMapLink(url) {
   } catch (e) {}
   return null;
 }
- 
+
 // Agar havolada koordinata to'g'ridan-to'g'ri ko'rinmasa (masalan kompyuterdan
 // tashlangan "tashkilot" havolasi), sahifaning o'zini ochib, ichidan
 // koordinatalarni qidiramiz.
 async function resolveCoordinatesFromLink(url) {
   const direct = parseMapLink(url);
   if (direct) return direct;
- 
+
   try {
     const res = await fetch(url, {
       redirect: 'follow',
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
       signal: AbortSignal.timeout(8000)
     });
- 
+
     // Ba'zan sahifa qayta yo'naltirilgandan keyingi manzilning o'zida koordinata bo'ladi
     if (res.url) {
       const fromFinalUrl = parseMapLink(res.url);
       if (fromFinalUrl) return fromFinalUrl;
     }
- 
+
     const html = await res.text();
- 
+
     // Sahifa ichidagi "latitude"/"longitude" maydonlari (schema.org ma'lumotlari)
     const latM = html.match(/"latitude"\s*:\s*"?(-?\d+\.\d+)"?/);
     const lonM = html.match(/"longitude"\s*:\s*"?(-?\d+\.\d+)"?/);
     if (latM && lonM) return { lat: parseFloat(latM[1]), lon: parseFloat(lonM[1]) };
- 
+
     // Sahifa ichida ko'milgan ll=UZUNLIK,KENGLIK (statik xarita rasmi manzilida bo'lishi mumkin)
     const llM = html.match(/ll=(-?\d+\.\d+)%2C(-?\d+\.\d+)/) || html.match(/ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (llM) return { lon: parseFloat(llM[1]), lat: parseFloat(llM[2]) };
- 
+
   } catch (err) {
     console.error('Lokatsiya havolasini ochishda xatolik:', err.message);
   }
   return null;
 }
- 
+
 async function processOrder(data, customer, replyChatId) {
-  const customerName = customer?.first_name || 'Mijoz';
-  const customerUsername = customer?.username ? `@${customer.username}` : "username yo'q";
- 
+  const customerName = customer?.first_name || data.address?.name || 'Mijoz';
+  const customerUsername = customer?.username ? `@${customer.username}` : (data.source === 'website' ? 'sayt orqali' : "username yo'q");
+
   let total = 0;
   let itemsText = '';
- 
+
   data.items.forEach((item, i) => {
     const lineTotal = item.price * item.qty;
     total += lineTotal;
@@ -142,7 +142,7 @@ async function processOrder(data, customer, replyChatId) {
       itemsText += `   💬 <b>Izoh:</b> ${item.comment}\n`;
     }
   });
- 
+
   let addressText = '';
   if (data.address && (data.address.name || data.address.phone || data.address.address)) {
     addressText += `\n📍 <b>Yetkazib berish ma'lumoti:</b>\n`;
@@ -150,18 +150,21 @@ async function processOrder(data, customer, replyChatId) {
     if (data.address.phone) addressText += `   Tel: ${data.address.phone}\n`;
     if (data.address.address) addressText += `   Manzil: ${data.address.address}\n`;
   }
- 
+
+  const sourceTag = data.source === 'website' ? `\n🌐 Manba: Veb-sayt` : '';
+
   const adminMessage =
-    `🆕 <b>Yangi buyurtma — PASSO</b>\n` +
+    `🆕 <b>Yangi buyurtma — TOTSAMIY</b>\n` +
     `👤 Mijoz: ${customerName} (${customerUsername})\n` +
     (replyChatId ? `🆔 Chat ID: <code>${replyChatId}</code>\n` : '') +
+    sourceTag +
     itemsText +
     addressText +
     `\n💰 <b>Jami: ${total.toLocaleString('ru-RU')} so'm</b>`;
- 
+
   // Admin (siz)ga yuboriladi
   bot.sendMessage(ADMIN_CHAT_ID, adminMessage, { parse_mode: 'HTML' });
- 
+
   // Lokatsiya bo'lsa — haqiqiy Telegram pin (joylashuv) sifatida alohida yuboriladi
   if (data.address && data.address.location) {
     const coords = await resolveCoordinatesFromLink(data.address.location);
@@ -172,14 +175,14 @@ async function processOrder(data, customer, replyChatId) {
       bot.sendMessage(ADMIN_CHAT_ID, `🗺 Lokatsiya havolasi: ${data.address.location}`).catch(() => {});
     }
   }
- 
+
   // Mijozga tasdiq xabari (agar chat ID mavjud bo'lsa)
   if (replyChatId) {
     bot.sendMessage(replyChatId, "✅ Buyurtmangiz qabul qilindi! Tez orada operatorimiz siz bilan bog'lanadi.")
       .catch(() => {}); // agar mijoz botni bloklagan bo'lsa, xatolikni e'tiborsiz qoldiramiz
   }
 }
- 
+
 // Eski usul: Reply Keyboard orqali ochilgan Mini App'lar uchun (agar bo'lsa)
 bot.on('message', async (msg) => {
   if (!msg.web_app_data) return;
@@ -191,11 +194,11 @@ bot.on('message', async (msg) => {
     console.error('Buyurtmani qayta ishlashda xatolik:', err);
   }
 });
- 
+
 // ---------- Web-server (Mini App'dan to'g'ridan-to'g'ri kelgan buyurtmalar uchun) ----------
 const app = express();
 app.use(express.json());
- 
+
 // CORS — Netlify saytidan so'rov yuborishga ruxsat berish
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -204,11 +207,11 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
- 
+
 app.get('/', (req, res) => {
-  res.send('PASSO bot server ishlayapti.');
+  res.send('TOTSAMIY bot server ishlayapti.');
 });
- 
+
 app.post('/api/order', (req, res) => {
   try {
     const { items, address, user } = req.body;
@@ -225,10 +228,11 @@ app.post('/api/order', (req, res) => {
     res.status(500).json({ ok: false, error: 'Server xatoligi' });
   }
 });
- 
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`PASSO server ${PORT}-portda ishga tushdi...`);
+  console.log(`TOTSAMIY server ${PORT}-portda ishga tushdi...`);
 });
- 
-console.log('PASSO bot ishga tushdi...');
+
+console.log('TOTSAMIY bot ishga tushdi...');
+

@@ -1,5 +1,5 @@
 /**
- * TOTSAMIY — Telegram bot backend
+ * GIOVINCO — Telegram bot backend
  * -----------------------------
  * Bu skript ikkita vazifani bajaradi:
  * 1) Telegram bot sifatida ishlaydi (/start buyrug'i)
@@ -39,7 +39,7 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 // Mini App tugmasini ko'rsatuvchi /start buyrug'i
 bot.onText(/\/start/, (msg) => {
   const caption =
-    "Bu <b>TOTSAMIY</b> — erkaklar oyoq kiyimlari.\n\n" +
+    "Bu <b>GIOVINCO</b> — erkaklar oyoq kiyimlari.\n\n" +
     "Sizga yoqqan modelni tanlaysiz — biz esa buyurtmangiz asosida olib kelamiz.\n\n" +
     "✅ Sifatli mahsulotlar\n" +
     "✅ Zamonaviy modellar\n" +
@@ -54,7 +54,7 @@ bot.onText(/\/start/, (msg) => {
     reply_markup: {
       inline_keyboard: [[{
         text: "🛍 Do'konni ochish",
-        web_app: { url: 'https://lucent-twilight-79d21e.netlify.app' }
+        web_app: { url: 'https://tayvanchik.github.io/GIOVINCO1/' }
       }]]
     }
   };
@@ -154,7 +154,7 @@ async function processOrder(data, customer, replyChatId) {
   const sourceTag = data.source === 'website' ? `\n🌐 Manba: Veb-sayt` : '';
 
   const adminMessage =
-    `🆕 <b>Yangi buyurtma — TOTSAMIY</b>\n` +
+    `🆕 <b>Yangi buyurtma — GIOVINCO</b>\n` +
     `👤 Mijoz: ${customerName} (${customerUsername})\n` +
     (replyChatId ? `🆔 Chat ID: <code>${replyChatId}</code>\n` : '') +
     sourceTag +
@@ -209,7 +209,7 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('TOTSAMIY bot server ishlayapti.');
+  res.send('GIOVINCO bot server ishlayapti.');
 });
 
 app.post('/api/order', (req, res) => {
@@ -231,8 +231,8 @@ app.post('/api/order', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`TOTSAMIY server ${PORT}-portda ishga tushdi...`);
+  console.log(`GIOVINCO server ${PORT}-portda ishga tushdi...`);
 });
 
-console.log('TOTSAMIY bot ishga tushdi...');
+console.log('GIOVINCO bot ishga tushdi...');
 
